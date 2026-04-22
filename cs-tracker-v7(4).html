@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS 트래커 V7 - AI & Mail Parser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;900&display=swap');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .accent-gradient { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
+        .ai-gradient { background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); }
+        .mail-gradient { background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); }
+        .loading-spinner { border: 2px solid rgba(255, 255, 255, 0.3); border-top: 2px solid #ffffff; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 accent-gradient rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-200">🚀</div>
+                <div>
+                    <h1 class="text-xl font-black text-slate-800 tracking-tight italic">CS Tracker <span class="text-indigo-600">V7 PRO</span></h1>
+                    <p id="auth-info" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic tracking-tighter">Authenticating...</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 overflow-x-auto">
+                <div class="bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 min-w-[100px]">
+                    <p class="text-[9px] font-black text-indigo-400 uppercase">Total Logs</p>
+                    <p id="stat-total" class="text-lg font-black text-indigo-700 leading-none mt-1">0</p>
+                </div>
+                <div class="bg-orange-50 px-4 py-2 rounded-xl border border-orange-100 min-w-[100px]">
+                    <p class="text-[9px] font-black text-orange-400 uppercase">Mail Processed</p>
+                    <p id="stat-mail" class="text-lg font-black text-orange-700 leading-none mt-1">0</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sidebar: Input & Mail Parser -->
+        <aside class="lg:col-span-4 space-y-6">
+            
+            <!-- Mail Parser Tool -->
+            <div class="glass-card rounded-[2rem] p-6 shadow-xl border-orange-100 bg-orange-50/10">
+                <h3 class="text-sm font-black text-orange-600 mb-4 flex items-center gap-2">
+                    <span class="text-xl">📧</span> 이메일 데이터 추출
+                </h3>
+                <div class="space-y-3">
+                    <textarea id="mail-input" rows="3" class="w-full bg-white border border-orange-100 rounded-2xl px-4 py-3 text-xs focus:ring-2 focus:ring-orange-500 outline-none transition-all" placeholder="이메일 본문을 복사해서 붙여넣으세요..."></textarea>
+                    <button onclick="parseMailContent()" id="mail-btn" class="w-full mail-gradient text-white text-xs font-black py-3 rounded-xl shadow-lg shadow-orange-200 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
+                        <span>분석 및 필드 채우기</span>
+                        <div id="mail-loader" class="hidden loading-spinner"></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Standard Entry Form -->
+            <div class="glass-card rounded-[2rem] p-6 shadow-xl shadow-slate-200/50">
+                <h3 class="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
+                    <span class="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+                    CS 로그 등록
+                </h3>
+
+                <form id="main-form" class="space-y-4">
+                    <input type="hidden" id="edit-id">
+
+                    <!-- 접수 날짜 -->
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase ml-1">접수 날짜</label>
+                        <input type="date" id="input-date" required class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Buyer</label>
+                            <input type="text" id="input-buyer" required class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="거래처">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Model</label>
+                            <input type="text" id="input-model" required class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="모델명">
+                        </div>
+                    </div>
+
+                    <!-- HW / FW 버전 -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-1">HW Version</label>
+                            <input type="text" id="input-hw" class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="예) v1.2">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-1">FW Version</label>
+                            <input type="text" id="input-fw" class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="예) 2.0.1">
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Symptom</label>
+                        <input type="text" id="input-symptom" required class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="주요 증상 요약">
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Resolution Details</label>
+                        <textarea id="input-details" rows="4" class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="상세 조치 내용"></textarea>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Media Attachment</label>
+                        <input type="file" id="input-file" accept="image/*,video/*" class="hidden">
+                        <div onclick="document.getElementById('input-file').click()" class="cursor-pointer border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-indigo-400 transition-all bg-slate-50">
+                            <p id="file-status" class="text-[10px] font-bold text-slate-500">📷 사진/동영상 (Max 1.5MB)</p>
+                        </div>
+                        <div id="file-preview-area" class="hidden mt-2 relative rounded-xl overflow-hidden h-32 bg-black border border-slate-200">
+                            <img id="p-img" class="hidden w-full h-full object-cover">
+                            <video id="p-vid" class="hidden w-full h-full object-cover" muted loop></video>
+                            <button type="button" onclick="resetFile()" class="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full text-xs shadow-lg">×</button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button type="submit" id="save-btn" class="flex-1 accent-gradient text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all">
+                            <span id="btn-text">데이터 저장</span>
+                            <div id="btn-loader" class="hidden loading-spinner"></div>
+                        </button>
+                        <button type="button" onclick="analyzeCurrentEntry()" class="w-16 ai-gradient text-white rounded-xl flex items-center justify-center shadow-lg hover:rotate-12 transition-transform active:scale-90" title="AI 증상 분석">
+                            ✨
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- AI Results View -->
+            <div id="ai-insight-box" class="hidden glass-card rounded-[2rem] p-6 border-cyan-100 shadow-xl shadow-cyan-100/30">
+                <h4 class="text-xs font-black text-cyan-600 mb-3 uppercase tracking-tighter flex items-center gap-2">
+                    <span class="animate-pulse text-lg">💡</span> AI Intelligent Analysis
+                </h4>
+                <div id="ai-output" class="text-xs text-slate-600 leading-relaxed space-y-2 font-medium"></div>
+            </div>
+        </aside>
+
+        <!-- Logs Display -->
+        <section class="lg:col-span-8 space-y-4">
+            <div class="flex flex-col md:flex-row gap-3 items-center">
+                <div class="relative flex-1 w-full">
+                    <input type="text" id="search-input" class="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 pl-12 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="모델명, 증상, 거래처 검색...">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 italic font-bold">Q.</span>
+                </div>
+                <select id="filter-buyer" class="w-full md:w-auto bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 outline-none">
+                    <option value="all">전체 거래처</option>
+                </select>
+                <button onclick="generateAITrendReport()" class="w-full md:w-auto bg-white border border-indigo-200 text-indigo-600 rounded-2xl px-5 py-3 text-sm font-black hover:bg-indigo-50 transition-all whitespace-nowrap">
+                    트렌드 리포트
+                </button>
+            </div>
+
+            <div id="list-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar pb-10">
+                <!-- Data cards injected here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for Details -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onclick="closeModal()"></div>
+        <div class="relative bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+            <div id="modal-media" class="w-full md:w-1/2 bg-slate-950 flex items-center justify-center min-h-[300px]"></div>
+            <div class="w-full md:w-1/2 p-8 flex flex-col overflow-y-auto">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <span id="modal-buyer" class="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase">BUYER</span>
+                        <h2 id="modal-model" class="text-3xl font-black text-slate-800 mt-2 tracking-tight">MODEL</h2>
+                    </div>
+                    <button onclick="closeModal()" class="text-slate-300 hover:text-slate-800 transition-colors">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="space-y-6 flex-1">
+                    <!-- HW / FW / Date row in modal -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
+                            <h4 class="text-[9px] font-black text-slate-400 uppercase mb-1">접수일</h4>
+                            <p id="modal-date-received" class="text-xs font-black text-slate-700">—</p>
+                        </div>
+                        <div class="bg-blue-50 p-3 rounded-2xl border border-blue-100 text-center">
+                            <h4 class="text-[9px] font-black text-blue-400 uppercase mb-1">HW Ver</h4>
+                            <p id="modal-hw" class="text-xs font-black text-blue-700">—</p>
+                        </div>
+                        <div class="bg-violet-50 p-3 rounded-2xl border border-violet-100 text-center">
+                            <h4 class="text-[9px] font-black text-violet-400 uppercase mb-1">FW Ver</h4>
+                            <p id="modal-fw" class="text-xs font-black text-violet-700">—</p>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                        <h4 class="text-[10px] font-black text-slate-400 uppercase mb-2 italic">Symptom</h4>
+                        <p id="modal-symptom" class="text-base font-bold text-slate-800"></p>
+                    </div>
+                    <div>
+                        <h4 class="text-[10px] font-black text-slate-400 uppercase mb-2 italic">Detailed Log</h4>
+                        <p id="modal-details" class="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap"></p>
+                    </div>
+                </div>
+                <div class="mt-8 pt-4 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 italic">
+                    <span id="modal-date">SYNC: ---</span>
+                    <button onclick="copyToClipboard()" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-all">COPY TEXT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl text-xs font-bold z-[60] transition-all translate-y-20 opacity-0 pointer-events-none"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCI4AwqdI7_ng97Qqx0TBMOV1BUhpllsdE",
+            authDomain: "cs-tracker-591d4.firebaseapp.com",
+            projectId: "cs-tracker-591d4",
+            storageBucket: "cs-tracker-591d4.firebasestorage.app",
+            messagingSenderId: "779624093993",
+            appId: "1:779624093993:web:4c1cee75d1e2996b263f38"
+        };
+
+        const GEMINI_API_KEY = "AIzaSyD038z4IDp0AhyDMkjW3ubWxufhRwKC0Y8";
+
+        const appId = 'cs-pro-v7-ai';
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let user = null;
+        let logs = [];
+        let curMedia = null;
+        let curMediaType = null;
+        let filterVal = 'all';
+        let searchVal = '';
+
+        // 오늘 날짜를 기본값으로 설정
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('input-date').value = today;
+
+        // Auth
+        onAuthStateChanged(auth, (u) => {
+            user = u;
+            if (u) {
+                document.getElementById('auth-info').innerText = `CLOUD SYNC ACTIVE: ${u.uid.slice(0,10)}`;
+                document.getElementById('auth-info').classList.replace('text-slate-400', 'text-indigo-600');
+                loadLogs();
+            }
+        });
+
+        signInAnonymously(auth).catch(err => {
+            document.getElementById('auth-info').innerText = `AUTH ERROR: ${err.code}`;
+            showToast("인증 오류: Firebase 설정을 확인해주세요.");
+        });
+
+        // Firestore
+        function loadLogs() {
+            if (!user) return;
+            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+            onSnapshot(colRef, (snap) => {
+                logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateMeta();
+                renderList();
+            }, (err) => showToast("데이터베이스 연결 오류: Firestore 설정을 확인해주세요."));
+        }
+
+        // Gemini AI
+        async function askGemini(prompt, system, isJson = false) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+            const config = isJson ? { responseMimeType: "application/json" } : {};
+            
+            for (let i = 0; i < 3; i++) {
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: { parts: [{ text: system }] },
+                            generationConfig: config
+                        })
+                    });
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+                    }
+                    const data = await res.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                } catch (e) {
+                    console.error(`Gemini 시도 ${i+1} 실패:`, e.message);
+                    if (i === 2) throw e;
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+                }
+            }
+            return "";
+        }
+
+        window.parseMailContent = async () => {
+            const content = document.getElementById('mail-input').value;
+            if (!content.trim()) return showToast("메일 내용을 입력해 주세요.");
+
+            const loader = document.getElementById('mail-loader');
+            const btn = document.getElementById('mail-btn');
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const system = `당신은 CS 데이터 추출 전문가입니다. 제공된 텍스트에서 '거래처(buyer)', '모델명(model)', 'HW 버전(hw)', 'FW 버전(fw)', '접수날짜(date, YYYY-MM-DD 형식)', '핵심 증상(symptom)', '상세 조치 내역(details)'을 추출하여 반드시 아래 JSON 형식으로만 반환하세요. 마크다운 없이 순수 JSON만 반환하세요. 정보가 없으면 빈 문자열을 넣으세요.\n{"buyer":"","model":"","hw":"","fw":"","date":"","symptom":"","details":""}`;
+                const prompt = `텍스트 본문:\n${content}`;
+
+                const result = await askGemini(prompt, system, true);
+                const clean = result.replace(/```json|```/g, '').trim();
+                const parsed = JSON.parse(clean);
+
+                document.getElementById('input-buyer').value = parsed.buyer || "";
+                document.getElementById('input-model').value = parsed.model || "";
+                document.getElementById('input-hw').value = parsed.hw || "";
+                document.getElementById('input-fw').value = parsed.fw || "";
+                if (parsed.date) document.getElementById('input-date').value = parsed.date;
+                document.getElementById('input-symptom').value = parsed.symptom || "";
+                document.getElementById('input-details').value = parsed.details || "";
+
+                showToast("✅ 이메일 데이터 추출 성공!");
+                document.getElementById('mail-input').value = "";
+                const curM = parseInt(document.getElementById('stat-mail').innerText) || 0;
+                document.getElementById('stat-mail').innerText = curM + 1;
+
+            } catch (e) {
+                console.error(e);
+                showToast("❌ 분석 오류: " + e.message);
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        };
+
+        window.analyzeCurrentEntry = async () => {
+            const sym = document.getElementById('input-symptom').value;
+            const model = document.getElementById('input-model').value;
+            if (!sym) return showToast("증상을 먼저 입력하세요.");
+
+            const box = document.getElementById('ai-insight-box');
+            const out = document.getElementById('ai-output');
+            box.classList.remove('hidden');
+            out.innerHTML = '<div class="flex items-center gap-2"><div class="loading-spinner border-cyan-500 !border-t-cyan-500"></div> AI가 해결책 검색 중...</div>';
+
+            try {
+                const context = logs.slice(0, 8).map(l => `[${l.model}] ${l.symptom} -> ${l.details}`).join('\n');
+                const system = "당신은 기술 지원 전문가입니다. 사용자의 모델명과 증상에 대해 과거 사례를 분석하여 예상 원인과 조치법을 한국어로 2~3줄 요약 답변하세요.";
+                const prompt = `현재 입력된 모델: ${model}\n현재 입력된 증상: ${sym}\n\n과거 기록:\n${context}`;
+
+                const res = await askGemini(prompt, system);
+                out.innerHTML = `<p>${res.replace(/\n/g, '<br>')}</p>`;
+            } catch (e) {
+                out.innerHTML = `<p class="text-red-500">분석 오류: ${e.message}</p>`;
+            }
+        };
+
+        window.generateAITrendReport = async () => {
+            if (logs.length < 2) return showToast("분석할 데이터가 부족합니다.");
+
+            showToast("전체 트렌드 분석 생성 중...");
+            try {
+                const context = logs.slice(0, 15).map(l => `[${l.buyer}] ${l.model} (HW:${l.hw||'-'} FW:${l.fw||'-'}): ${l.symptom}`).join('\n');
+                const system = "데이터를 분석하여 가장 많이 발생한 거래처, 주요 모델, HW/FW 버전별 이슈 패턴, 그리고 가장 시급히 해결해야 할 반복 증상을 리포트 형식으로 작성하세요.";
+                const res = await askGemini(context, system);
+
+                document.getElementById('modal-media').innerHTML = `<div class="p-8 text-white text-xs leading-loose h-full w-full overflow-y-auto bg-slate-900">${res.replace(/\n/g, '<br>')}</div>`;
+                document.getElementById('modal-buyer').innerText = "AI INSIGHT";
+                document.getElementById('modal-model').innerText = "종합 트렌드 리포트";
+                document.getElementById('modal-symptom').innerText = "핵심 이슈 데이터 요약";
+                document.getElementById('modal-details').innerText = res;
+                document.getElementById('modal-date-received').innerText = "—";
+                document.getElementById('modal-hw').innerText = "—";
+                document.getElementById('modal-fw').innerText = "—";
+                document.getElementById('detail-modal').classList.remove('hidden');
+            } catch(e) {
+                showToast("리포트 생성 오류: " + e.message);
+            }
+        };
+
+        // File handling
+        const fileIn = document.getElementById('input-file');
+        fileIn.onchange = (e) => {
+            const f = e.target.files[0];
+            if (!f || f.size > 1572864) return showToast("파일이 너무 큽니다 (1.5MB 제한)");
+            const r = new FileReader();
+            r.onload = (ev) => {
+                curMedia = ev.target.result;
+                curMediaType = f.type.startsWith('video') ? 'video' : 'image';
+                document.getElementById('file-status').innerText = "✅ 미디어 준비됨";
+                document.getElementById('file-preview-area').classList.remove('hidden');
+                const i = document.getElementById('p-img'), v = document.getElementById('p-vid');
+                if (curMediaType === 'video') { v.src = curMedia; v.classList.remove('hidden'); i.classList.add('hidden'); }
+                else { i.src = curMedia; i.classList.remove('hidden'); v.classList.add('hidden'); }
+            };
+            r.readAsDataURL(f);
+        };
+
+        window.resetFile = () => {
+            curMedia = null; curMediaType = null; fileIn.value = "";
+            document.getElementById('file-status').innerText = "📷 사진/동영상 (Max 1.5MB)";
+            document.getElementById('file-preview-area').classList.add('hidden');
+        };
+
+        document.getElementById('main-form').onsubmit = async (e) => {
+            e.preventDefault();
+            if (!user) return showToast("인증 대기 중입니다. 잠시 후 다시 시도해주세요.");
+            const btn = document.getElementById('save-btn'), loader = document.getElementById('btn-loader');
+            const eid = document.getElementById('edit-id').value;
+
+            btn.disabled = true; loader.classList.remove('hidden');
+
+            const payload = {
+                date: document.getElementById('input-date').value,
+                buyer: document.getElementById('input-buyer').value.trim(),
+                model: document.getElementById('input-model').value.trim(),
+                hw: document.getElementById('input-hw').value.trim(),
+                fw: document.getElementById('input-fw').value.trim(),
+                symptom: document.getElementById('input-symptom').value.trim(),
+                details: document.getElementById('input-details').value.trim(),
+                media: curMedia,
+                mediaType: curMediaType,
+                updatedAt: serverTimestamp()
+            };
+
+            try {
+                if (eid) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', eid), payload);
+                    showToast("✅ 로그가 업데이트되었습니다.");
+                } else {
+                    payload.createdAt = serverTimestamp();
+                    payload.uid = user.uid;
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), payload);
+                    showToast("✅ 신규 로그가 등록되었습니다.");
+                }
+                e.target.reset();
+                document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+                document.getElementById('edit-id').value = "";
+                document.getElementById('btn-text').innerText = "데이터 저장";
+                resetFile();
+                document.getElementById('ai-insight-box').classList.add('hidden');
+            } catch (err) {
+                console.error(err);
+                showToast("❌ 데이터 처리 오류: " + err.message);
+            } finally {
+                btn.disabled = false; loader.classList.add('hidden');
+            }
+        };
+
+        function updateMeta() {
+            document.getElementById('stat-total').innerText = logs.length;
+            const buyers = [...new Set(logs.map(l => l.buyer))].sort();
+            const sel = document.getElementById('filter-buyer');
+            const old = sel.value;
+            sel.innerHTML = '<option value="all">전체 거래처</option>' +
+                buyers.map(b => `<option value="${b}">${b}</option>`).join('');
+            sel.value = old;
+        }
+
+        function renderList() {
+            const container = document.getElementById('list-container');
+            const filtered = logs.filter(l => {
+                const s = (l.buyer + l.model + l.symptom + (l.hw||'') + (l.fw||'')).toLowerCase().includes(searchVal.toLowerCase());
+                const b = filterVal === 'all' || l.buyer === filterVal;
+                return s && b;
+            }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="col-span-2 text-center text-slate-400 font-bold py-20">등록된 로그가 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(l => `
+                <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer group relative overflow-hidden" onclick="openDetail('${l.id}')">
+                    <div class="flex gap-4 relative z-10">
+                        <div class="w-16 h-16 bg-slate-50 rounded-2xl flex-shrink-0 overflow-hidden flex items-center justify-center border border-slate-50">
+                            ${l.media ? (l.mediaType === 'video' ? '🎬' : `<img src="${l.media}" class="w-full h-full object-cover">`) : '📁'}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-[9px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md uppercase">${l.buyer}</span>
+                                    ${l.date ? `<span class="text-[9px] font-bold text-slate-400">${l.date}</span>` : ''}
+                                </div>
+                                <div class="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity" onclick="event.stopPropagation()">
+                                    <button onclick="editEntry('${l.id}')" class="text-slate-300 hover:text-indigo-600">✎</button>
+                                    <button onclick="deleteEntry('${l.id}')" class="text-slate-300 hover:text-red-500">×</button>
+                                </div>
+                            </div>
+                            <h4 class="font-black text-slate-800 text-sm truncate mt-1 tracking-tight">${l.model}</h4>
+                            <p class="text-[11px] text-slate-500 line-clamp-1 mt-0.5 font-medium">${l.symptom}</p>
+                            ${(l.hw || l.fw) ? `
+                            <div class="flex gap-2 mt-1.5">
+                                ${l.hw ? `<span class="text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">HW ${l.hw}</span>` : ''}
+                                ${l.fw ? `<span class="text-[9px] font-black text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded">FW ${l.fw}</span>` : ''}
+                            </div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.openDetail = (id) => {
+            const l = logs.find(i => i.id === id);
+            if (!l) return;
+            const m = document.getElementById('modal-media');
+            m.innerHTML = l.media ?
+                (l.mediaType === 'video' ? `<video src="${l.media}" controls class="max-h-full max-w-full"></video>` : `<img src="${l.media}" class="max-h-full max-w-full object-contain">`) :
+                '<div class="text-slate-400 font-black text-4xl italic">NO DATA</div>';
+
+            document.getElementById('modal-buyer').innerText = l.buyer;
+            document.getElementById('modal-model').innerText = l.model;
+            document.getElementById('modal-symptom').innerText = l.symptom;
+            document.getElementById('modal-details').innerText = l.details;
+            document.getElementById('modal-date-received').innerText = l.date || '—';
+            document.getElementById('modal-hw').innerText = l.hw || '—';
+            document.getElementById('modal-fw').innerText = l.fw || '—';
+            document.getElementById('modal-date').innerText = `SYNCED AT: ${l.createdAt ? new Date(l.createdAt.seconds * 1000).toLocaleString() : 'N/A'}`;
+            document.getElementById('detail-modal').classList.remove('hidden');
+        };
+
+        window.editEntry = (id) => {
+            const l = logs.find(i => i.id === id);
+            if (!l) return;
+            document.getElementById('edit-id').value = id;
+            document.getElementById('input-date').value = l.date || '';
+            document.getElementById('input-buyer').value = l.buyer;
+            document.getElementById('input-model').value = l.model;
+            document.getElementById('input-hw').value = l.hw || '';
+            document.getElementById('input-fw').value = l.fw || '';
+            document.getElementById('input-symptom').value = l.symptom;
+            document.getElementById('input-details').value = l.details;
+            document.getElementById('btn-text').innerText = "로그 수정 저장";
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.deleteEntry = async (id) => {
+            if (!confirm("이 데이터를 영구적으로 삭제하시겠습니까?")) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id));
+                showToast("✅ 데이터가 삭제되었습니다.");
+            } catch (err) { showToast("❌ 권한 부족: " + err.message); }
+        };
+
+        window.closeModal = () => document.getElementById('detail-modal').classList.add('hidden');
+        window.copyToClipboard = () => {
+            const dateStr = document.getElementById('modal-date-received').innerText;
+            const hw = document.getElementById('modal-hw').innerText;
+            const fw = document.getElementById('modal-fw').innerText;
+            const t = `[${document.getElementById('modal-buyer').innerText}] ${document.getElementById('modal-model').innerText}\n접수일: ${dateStr} | HW: ${hw} | FW: ${fw}\n증상: ${document.getElementById('modal-symptom').innerText}\n내용: ${document.getElementById('modal-details').innerText}`;
+            navigator.clipboard.writeText(t).then(() => showToast("✅ 클립보드에 복사되었습니다.")).catch(() => {
+                const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+                showToast("✅ 클립보드에 복사되었습니다.");
+            });
+        };
+
+        document.getElementById('search-input').oninput = (e) => { searchVal = e.target.value; renderList(); };
+        document.getElementById('filter-buyer').onchange = (e) => { filterVal = e.target.value; renderList(); };
+
+        function showToast(msg) {
+            const t = document.getElementById('toast'); t.innerText = msg;
+            t.classList.replace('opacity-0', 'opacity-100'); t.classList.replace('translate-y-20', 'translate-y-0');
+            setTimeout(() => { t.classList.replace('opacity-100', 'opacity-0'); t.classList.replace('translate-y-0', 'translate-y-20'); }, 3000);
+        }
+    </script>
+</body>
+</html>
